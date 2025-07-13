@@ -1,0 +1,46 @@
+# SELENE - Schematic Review Tool Dependencies
+# Python 3.8+ required
+
+# Core GUI - Tkinter comes built-in with Python
+
+# Image Processing
+Pillow>=10.0.0
+
+# PDF Processing (we'll use both for better compatibility)
+PyPDF2>=3.0.1
+pdfplumber>=0.10.3
+
+# HTTP Requests for Ollama API
+requests>=2.31.0
+
+# File Type Detection
+python-magic-bin>=0.4.14  # Use python-magic-bin on Windows for easier setup
+
+# Additional utilities for better text processing
+pypdf>=3.17.0  # Modern PyPDF2 fork with better features
+
+# Optional but recommended for development
+# pytest>=7.4.0
+# black>=23.0.0
+# flake8>=6.0.0
+
+# Note: On Linux/Mac, you might need to install python-magic instead:
+# python-magic>=0.4.27
+
+# Installation notes:
+# 1. Create a virtual environment first:
+#    python -m venv venv
+#    
+# 2. Activate the virtual environment:
+#    Windows: venv\Scripts\activate
+#    Linux/Mac: source venv/bin/activate
+#
+# 3. Install dependencies:
+#    pip install -r requirements.txt
+#
+# 4. If you encounter issues with python-magic on Windows:
+#    pip install python-magic-bin
+#
+# 5. For Linux/Mac users, you may need to install libmagic:
+#    Ubuntu/Debian: sudo apt-get install libmagic1
+#    Mac: brew install libmagic
