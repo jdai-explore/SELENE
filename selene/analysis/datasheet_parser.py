@@ -581,3 +581,86 @@ def normalize_units(value_string: str) -> str:
         
     Returns:
         str: Normalized value
+    """
+    # Common unit normalizations
+    normalizations = {
+        'kohm': 'kΩ',
+        'kohms': 'kΩ',
+        'megohm': 'MΩ',
+        'megohms': 'MΩ',
+        'microfarad': 'µF',
+        'microfarads': 'µF',
+        'nanofarad': 'nF',
+        'nanofarads': 'nF',
+        'picofarad': 'pF',
+        'picofarads': 'pF',
+        'millihenry': 'mH',
+        'millihenries': 'mH',
+        'microhenry': 'µH',
+        'microhenries': 'µH',
+        'volts': 'V',
+        'amps': 'A',
+        'amperes': 'A',
+        'watts': 'W',
+        'hertz': 'Hz',
+        'celsius': '°C',
+        'fahrenheit': '°F'
+    }
+    
+    # Convert to lowercase for matching
+    lower_value = value_string.lower()
+    
+    # Replace known normalizations
+    for old_unit, new_unit in normalizations.items():
+        if old_unit in lower_value:
+            return value_string.replace(old_unit, new_unit)
+    
+    # Handle common abbreviations
+    # k = 1000, M = 1,000,000, etc.
+    if re.search(r'\d+k(?![a-z])', value_string, re.IGNORECASE):
+        return re.sub(r'(\d+)k(?![a-z])', r'\1k', value_string, flags=re.IGNORECASE)
+    
+    return value_string
+
+
+if __name__ == "__main__":
+    # Test the datasheet parser
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    
+    # Sample datasheet text for testing
+    test_text = """
+    LM7805 DATASHEET
+    
+    FEATURES
+    • Output Current up to 1A
+    • Output Voltages of 5V
+    • Thermal Overload Protection
+    
+    PIN CONFIGURATION
+    Pin 1 INPUT - Connect to unregulated DC input
+    Pin 2 GROUND - Connect to ground
+    Pin 3 OUTPUT - Regulated 5V output
+    
+    ELECTRICAL CHARACTERISTICS
+    Input Voltage: 7V to 35V
+    Output Voltage: 5V ±4%
+    Output Current: 1A max
+    Power Dissipation: 15W max
+    Operating Temperature: 0°C to 125°C
+    
+    TYPICAL APPLICATION
+    The LM7805 requires only two external capacitors for operation.
+    Input capacitor C1: 0.33µF
+    Output capacitor C2: 0.1µF
+    """
+    
+    parser = DatasheetParser()
+    result = parser.parse(test_text)
+    
+    print("Datasheet Parser Test Results:")
+    print(f"Component: {result['component_name']}")
+    print(f"Features: {len(result['features'])} found")
+    print(f"Pin Config: {len(result['pin_config'])} pins")
+    print(f"Electrical Specs: {len(result['electrical_specs'])} parameters")
+    print(f"Operating Conditions: {len(result['operating_conditions'])} conditions")
