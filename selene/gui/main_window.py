@@ -40,7 +40,7 @@ class MainWindow(tk.Tk):
         # State variables
         self.current_schematic = None
         self.current_datasheet = None
-        self.datasheet_data = {}
+        self.datasheet_data = {}  # Initialize as empty dict
         
         # Setup window
         self.setup_window()
@@ -347,19 +347,72 @@ class MainWindow(tk.Tk):
         try:
             self.show_progress(True)
             
-            # Extract and parse datasheet
-            from analysis.datasheet_parser import DatasheetParser
-            
+            # Extract text from PDF
             text = self.pdf_processor.extract_text(pdf_path)
-            parser = DatasheetParser()
-            self.datasheet_data = parser.parse(text)
             
-            self.update_status(f"Processed datasheet: {self.datasheet_data.get('component_name', 'Unknown')}")
-            self.logger.info(f"Datasheet processed successfully: {self.datasheet_data.keys()}")
+            # Parse datasheet - ensure we always return a dict
+            try:
+                from analysis.datasheet_parser import DatasheetParser
+                parser = DatasheetParser()
+                self.datasheet_data = parser.parse(text)
+                
+                # Ensure datasheet_data is always a dict
+                if not isinstance(self.datasheet_data, dict):
+                    self.logger.warning("Parser returned non-dict, creating fallback dict")
+                    self.datasheet_data = {
+                        'component_name': 'Unknown',
+                        'error': 'Parser returned invalid data type',
+                        'full_text': str(text) if text else '',
+                        'pin_config': {},
+                        'electrical_specs': {},
+                        'recommended_circuits': [],
+                        'key_parameters': {},
+                        'features': [],
+                        'operating_conditions': {},
+                        'package_info': 'Unknown',
+                        'application_notes': []
+                    }
+                
+            except Exception as parse_error:
+                self.logger.error(f"Datasheet parsing failed: {parse_error}")
+                # Create fallback datasheet data structure
+                self.datasheet_data = {
+                    'component_name': 'Unknown Component',
+                    'error': f'Parsing failed: {str(parse_error)}',
+                    'full_text': str(text) if text else '',
+                    'pin_config': {},
+                    'electrical_specs': {},
+                    'recommended_circuits': [],
+                    'key_parameters': {},
+                    'features': [],
+                    'operating_conditions': {},
+                    'package_info': 'Unknown',
+                    'application_notes': []
+                }
+            
+            component_name = self.datasheet_data.get('component_name', 'Unknown Component')
+            self.update_status(f"Processed datasheet: {component_name}")
+            self.logger.info(f"Datasheet processed successfully for: {component_name}")
             
         except Exception as e:
             self.logger.error(f"Error processing datasheet: {e}")
             self.update_status("Error processing datasheet")
+            
+            # Create minimal fallback datasheet data
+            self.datasheet_data = {
+                'component_name': 'Unknown',
+                'error': str(e),
+                'full_text': '',
+                'pin_config': {},
+                'electrical_specs': {},
+                'recommended_circuits': [],
+                'key_parameters': {},
+                'features': [],
+                'operating_conditions': {},
+                'package_info': 'Unknown',
+                'application_notes': []
+            }
+            
             messagebox.showerror("Datasheet Error", f"Could not process datasheet:\n{str(e)}")
         finally:
             self.show_progress(False)
@@ -387,6 +440,10 @@ class MainWindow(tk.Tk):
     def run_analysis(self, analysis_type, custom_query):
         """Run the actual analysis"""
         try:
+            # Ensure datasheet_data is always a dict
+            if not isinstance(self.datasheet_data, dict):
+                self.datasheet_data = {}
+            
             # Perform analysis
             results = self.analyzer.analyze(
                 self.current_schematic,
@@ -424,7 +481,7 @@ class MainWindow(tk.Tk):
         """Clear all uploaded files and results"""
         self.current_schematic = None
         self.current_datasheet = None
-        self.datasheet_data = {}
+        self.datasheet_data = {}  # Reset to empty dict
         
         self.upload_panel.clear_uploads()
         self.results_panel.clear_results()

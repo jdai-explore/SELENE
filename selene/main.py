@@ -25,12 +25,12 @@ def setup_logging():
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     
-    # Configure logging
+    # Configure logging with UTF-8 encoding
     logging.basicConfig(
         level=getattr(logging, config.LOG_LEVEL, logging.INFO),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_dir / config.LOG_FILE),
+            logging.FileHandler(log_dir / config.LOG_FILE, encoding='utf-8'),
             logging.StreamHandler(sys.stdout)
         ]
     )
@@ -64,10 +64,11 @@ def check_dependencies():
     for module, package_name in required_packages.items():
         try:
             __import__(module)
-            logger.info(f"✓ {package_name} is installed")
+            # Use simple checkmark that works on all systems
+            logger.info(f"[OK] {package_name} is installed")
         except ImportError:
             missing_deps.append(package_name)
-            logger.error(f"✗ {package_name} is not installed")
+            logger.error(f"[MISSING] {package_name} is not installed")
     
     # Check Ollama connection
     ollama_status = check_ollama_connection()
@@ -126,11 +127,14 @@ def check_ollama_connection():
             logger.warning("llava model is not installed in Ollama")
             return False
         
-        logger.info("✓ Ollama is running and llava model is available")
+        logger.info("[OK] Ollama is running and llava model is available")
         return True
         
     except requests.exceptions.ConnectionError:
         logger.warning("Cannot connect to Ollama at " + config.OLLAMA_BASE_URL)
+        return False
+    except requests.exceptions.Timeout:
+        logger.error("Ollama connection timed out")
         return False
     except Exception as e:
         logger.error(f"Error checking Ollama: {str(e)}")

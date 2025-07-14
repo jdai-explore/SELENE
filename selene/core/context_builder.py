@@ -1,5 +1,5 @@
 """
-Build analysis context combining schematic and datasheet information
+Build analysis context combining schematic and datasheet information - Fixed version
 """
 
 import logging
@@ -40,10 +40,15 @@ class ContextBuilder:
             dict: Complete context for analysis
         """
         try:
+            # Ensure datasheet_data is a dict
+            if not isinstance(datasheet_data, dict):
+                self.logger.warning(f"datasheet_data is not a dict, got {type(datasheet_data)}")
+                datasheet_data = {}
+            
             context = {
                 'schematic_path': schematic_path,
                 'query_type': query_type,
-                'has_datasheet': bool(datasheet_data),
+                'has_datasheet': bool(datasheet_data and datasheet_data.get('component_name') != 'Unknown'),
                 'timestamp': self._get_timestamp()
             }
             
@@ -61,7 +66,7 @@ class ContextBuilder:
                 context['prompt'] = self._build_preset_prompt(context, query_type)
             
             # Add analysis instructions
-            context['instructions'] = self._get_analysis_instructions(query_type, bool(datasheet_data))
+            context['instructions'] = self._get_analysis_instructions(query_type, context.get('has_datasheet', False))
             
             self.logger.info(f"Built context for {query_type} analysis")
             return context
@@ -96,7 +101,7 @@ class ContextBuilder:
             context: Context dictionary to update
             datasheet_data: Parsed datasheet information
         """
-        # Extract key information
+        # Safely extract key information
         context['datasheet'] = {
             'component_name': datasheet_data.get('component_name', 'Unknown Component'),
             'has_pin_config': bool(datasheet_data.get('pin_config')),
@@ -106,20 +111,17 @@ class ContextBuilder:
         }
         
         # Add specific sections if available
-        if datasheet_data.get('pin_config'):
-            context['datasheet']['pin_configuration'] = self._format_pin_config(
-                datasheet_data['pin_config']
-            )
+        pin_config = datasheet_data.get('pin_config')
+        if pin_config:
+            context['datasheet']['pin_configuration'] = self._format_pin_config(pin_config)
         
-        if datasheet_data.get('electrical_specs'):
-            context['datasheet']['key_specifications'] = self._format_electrical_specs(
-                datasheet_data['electrical_specs']
-            )
+        electrical_specs = datasheet_data.get('electrical_specs')
+        if electrical_specs:
+            context['datasheet']['key_specifications'] = self._format_electrical_specs(electrical_specs)
         
-        if datasheet_data.get('recommended_circuits'):
-            context['datasheet']['design_guidelines'] = self._format_recommended_circuits(
-                datasheet_data['recommended_circuits']
-            )
+        recommended_circuits = datasheet_data.get('recommended_circuits')
+        if recommended_circuits:
+            context['datasheet']['design_guidelines'] = self._format_recommended_circuits(recommended_circuits)
     
     def _create_datasheet_summary(self, datasheet_data: Dict[str, Any]) -> str:
         """Create a concise summary of datasheet information
@@ -133,24 +135,27 @@ class ContextBuilder:
         summary_parts = []
         
         # Component name
-        if datasheet_data.get('component_name'):
-            summary_parts.append(f"Component: {datasheet_data['component_name']}")
+        component_name = datasheet_data.get('component_name')
+        if component_name and component_name != 'Unknown':
+            summary_parts.append(f"Component: {component_name}")
         
         # Key features
-        if datasheet_data.get('features'):
-            features = datasheet_data['features']
-            if isinstance(features, list):
-                summary_parts.append(f"Features: {', '.join(features[:5])}")
-            else:
-                summary_parts.append(f"Features: {str(features)[:100]}")
+        features = datasheet_data.get('features', [])
+        if features:
+            if isinstance(features, list) and len(features) > 0:
+                summary_parts.append(f"Features: {', '.join(features[:3])}")
+            elif isinstance(features, str):
+                summary_parts.append(f"Features: {features[:100]}")
         
         # Operating conditions
-        if datasheet_data.get('operating_conditions'):
+        operating_conditions = datasheet_data.get('operating_conditions')
+        if operating_conditions:
             summary_parts.append("Has operating conditions specifications")
         
         # Package information
-        if datasheet_data.get('package_info'):
-            summary_parts.append(f"Package: {datasheet_data['package_info']}")
+        package_info = datasheet_data.get('package_info')
+        if package_info and package_info != 'Unknown' and package_info != 'Package information not found':
+            summary_parts.append(f"Package: {package_info}")
         
         return " | ".join(summary_parts) if summary_parts else "Limited datasheet information available"
     
@@ -249,7 +254,7 @@ class ContextBuilder:
             str: Complete prompt
         """
         # Get base template
-        template = PROMPT_TEMPLATES.get(query_type, PROMPT_TEMPLATES["Custom Query"])
+        template = PROMPT_TEMPLATES.get(query_type, PROMPT_TEMPLATES.get("Custom Query", "Please analyze this schematic."))
         
         # Build comprehensive prompt
         prompt_parts = [
@@ -259,24 +264,25 @@ class ContextBuilder:
         
         # Add datasheet context if available
         if context.get('has_datasheet'):
+            datasheet = context.get('datasheet', {})
             prompt_parts.extend([
                 "DATASHEET INFORMATION:",
-                f"Component: {context['datasheet']['component_name']}",
-                f"Summary: {context['datasheet']['summary']}",
+                f"Component: {datasheet.get('component_name', 'Unknown')}",
+                f"Summary: {datasheet.get('summary', 'No summary available')}",
                 ""
             ])
             
-            if context['datasheet'].get('pin_configuration'):
+            if datasheet.get('pin_configuration'):
                 prompt_parts.extend([
                     "PIN CONFIGURATION:",
-                    context['datasheet']['pin_configuration'],
+                    datasheet['pin_configuration'][:500] + ("..." if len(datasheet['pin_configuration']) > 500 else ""),
                     ""
                 ])
             
-            if context['datasheet'].get('key_specifications'):
+            if datasheet.get('key_specifications'):
                 prompt_parts.extend([
                     "KEY SPECIFICATIONS:",
-                    context['datasheet']['key_specifications'],
+                    datasheet['key_specifications'][:500] + ("..." if len(datasheet['key_specifications']) > 500 else ""),
                     ""
                 ])
         
@@ -303,18 +309,19 @@ class ContextBuilder:
         Returns:
             str: Complete prompt
         """
+        if not custom_query:
+            custom_query = "Please analyze this schematic for any issues or recommendations."
+        
         prompt_parts = [
             "You are analyzing an electronic schematic. "
         ]
         
         # Add datasheet context if available
         if context.get('has_datasheet'):
-            prompt_parts.append(
-                f"The schematic is for a {context['datasheet']['component_name']}. "
-            )
-            prompt_parts.append(
-                "I have provided relevant datasheet information below for reference. "
-            )
+            datasheet = context.get('datasheet', {})
+            component_name = datasheet.get('component_name', 'Unknown Component')
+            prompt_parts.append(f"The schematic is for a {component_name}. ")
+            prompt_parts.append("I have provided relevant datasheet information below for reference. ")
         
         prompt_parts.extend([
             "\n\nUSER QUERY:",
@@ -324,16 +331,18 @@ class ContextBuilder:
         
         # Add datasheet details if available
         if context.get('has_datasheet'):
+            datasheet = context.get('datasheet', {})
             prompt_parts.extend([
                 "\nDATASHEET CONTEXT:",
-                f"Component: {context['datasheet']['component_name']}",
-                f"Summary: {context['datasheet']['summary']}"
+                f"Component: {datasheet.get('component_name', 'Unknown')}",
+                f"Summary: {datasheet.get('summary', 'No summary available')}"
             ])
             
-            if context['datasheet'].get('pin_configuration'):
+            if datasheet.get('pin_configuration'):
+                pin_config = datasheet['pin_configuration']
                 prompt_parts.extend([
                     "\nPIN CONFIGURATION:",
-                    context['datasheet']['pin_configuration'][:500] + "..."
+                    pin_config[:500] + ("..." if len(pin_config) > 500 else "")
                 ])
         
         prompt_parts.extend([
@@ -449,6 +458,7 @@ def merge_contexts(contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     # Test the context builder
+    import logging
     logging.basicConfig(level=logging.INFO)
     
     builder = ContextBuilder()

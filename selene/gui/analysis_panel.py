@@ -1,5 +1,5 @@
 """
-Analysis control buttons and custom query input
+Analysis control buttons and custom query input - Fixed version
 """
 
 import tkinter as tk
@@ -17,31 +17,11 @@ class AnalysisPanel(ttk.Frame):
     
     # Preset analysis types
     PRESET_ANALYSES = [
-        {
-            "name": "Component Verification",
-            "icon": "🔍",
-            "tooltip": "Verify component values against datasheet recommendations"
-        },
-        {
-            "name": "Pin Configuration Check",
-            "icon": "📌",
-            "tooltip": "Check pin connections and assignments"
-        },
-        {
-            "name": "Power Supply Analysis",
-            "icon": "⚡",
-            "tooltip": "Analyze power supply design and decoupling"
-        },
-        {
-            "name": "Design Compliance",
-            "icon": "✅",
-            "tooltip": "Check compliance with datasheet recommendations"
-        },
-        {
-            "name": "Missing Components",
-            "icon": "❓",
-            "tooltip": "Identify missing required components"
-        }
+        "Component Verification",
+        "Pin Configuration Check", 
+        "Power Supply Analysis",
+        "Design Compliance",
+        "Missing Components"
     ]
     
     def __init__(self, parent, analysis_callback):
@@ -51,7 +31,10 @@ class AnalysisPanel(ttk.Frame):
         self.analysis_callback = analysis_callback
         
         # State variables
-        self.buttons = {}
+        self.preset_buttons = []
+        self.custom_submit_btn = None
+        self.custom_entry = None
+        self.custom_query_var = None
         self.schematic_loaded = False
         self.datasheet_loaded = False
         
@@ -77,280 +60,300 @@ class AnalysisPanel(ttk.Frame):
         )
         title_label.pack(pady=(0, 10))
         
-        # Create preset buttons frame
-        self.create_preset_buttons(main_frame)
+        # Create notebook for different sections
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill="both", expand=True)
         
-        # Separator
-        separator = ttk.Separator(main_frame, orient="horizontal")
-        separator.pack(fill="x", pady=15)
+        # Preset analysis tab
+        preset_frame = ttk.Frame(notebook)
+        notebook.add(preset_frame, text="Preset Analysis")
+        self.create_preset_buttons(preset_frame)
         
-        # Create custom query section
-        self.create_custom_query(main_frame)
+        # Custom query tab
+        custom_frame = ttk.Frame(notebook)
+        notebook.add(custom_frame, text="Custom Query")
+        self.create_custom_query(custom_frame)
         
         # Info label at bottom
         info_label = ttk.Label(
             main_frame,
             text="💡 Tip: Upload a datasheet for more accurate analysis",
-            font=(config.FONT_FAMILY, 10),
-            foreground=config.COLORS['text_secondary']
+            font=(config.FONT_FAMILY, 10)
         )
         info_label.pack(side="bottom", pady=(10, 0))
     
     def create_preset_buttons(self, parent):
         """Create the preset analysis buttons"""
-        # Frame for buttons
-        buttons_frame = ttk.Frame(parent)
+        # Container with padding
+        container = ttk.Frame(parent, padding="15")
+        container.pack(fill="both", expand=True)
+        
+        # Instructions
+        instructions = ttk.Label(
+            container,
+            text="Choose an analysis type to run on your schematic:",
+            font=(config.FONT_FAMILY, 11)
+        )
+        instructions.pack(pady=(0, 15))
+        
+        # Buttons frame
+        buttons_frame = ttk.Frame(container)
         buttons_frame.pack(fill="both", expand=True)
         
-        # Configure grid
-        for i in range(3):
-            buttons_frame.grid_columnconfigure(i, weight=1)
+        # Create buttons with descriptions
+        descriptions = [
+            "Verify component values against datasheet recommendations",
+            "Check pin connections and assignments", 
+            "Analyze power supply design and decoupling",
+            "Check compliance with datasheet recommendations",
+            "Identify missing required components"
+        ]
         
-        # Create buttons in a grid layout
-        for idx, analysis in enumerate(self.PRESET_ANALYSES):
-            row = idx // 3
-            col = idx % 3
+        for i, (analysis_type, description) in enumerate(zip(self.PRESET_ANALYSES, descriptions)):
+            # Button frame for each analysis type
+            btn_frame = ttk.LabelFrame(buttons_frame, text=analysis_type, padding="10")
+            btn_frame.pack(fill="x", pady=5)
             
-            # Button frame for styling
-            btn_frame = tk.Frame(
-                buttons_frame,
-                relief="raised",
-                borderwidth=1,
-                bg=config.COLORS['bg_secondary']
+            # Description
+            desc_label = ttk.Label(
+                btn_frame,
+                text=description,
+                font=(config.FONT_FAMILY, 9),
+                wraplength=400
             )
-            btn_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+            desc_label.pack(anchor="w")
             
-            # Make the row expandable
-            buttons_frame.grid_rowconfigure(row, weight=1)
-            
-            # Create button content
-            btn_content = tk.Frame(btn_frame, bg=config.COLORS['bg_secondary'])
-            btn_content.pack(expand=True)
-            
-            # Icon
-            icon_label = tk.Label(
-                btn_content,
-                text=analysis["icon"],
-                font=(config.FONT_FAMILY, 24),
-                bg=config.COLORS['bg_secondary']
+            # Button
+            btn = ttk.Button(
+                btn_frame,
+                text=f"Run {analysis_type}",
+                command=lambda at=analysis_type: self.on_preset_click(at),
+                style="Accent.TButton"
             )
-            icon_label.pack()
+            btn.pack(anchor="e", pady=(5, 0))
             
-            # Name
-            name_label = tk.Label(
-                btn_content,
-                text=analysis["name"],
-                font=(config.FONT_FAMILY, 11, "bold"),
-                bg=config.COLORS['bg_secondary'],
-                wraplength=120
-            )
-            name_label.pack(pady=(5, 0))
-            
-            # Store button reference
-            self.buttons[analysis["name"]] = {
-                "frame": btn_frame,
-                "content": btn_content,
-                "icon": icon_label,
-                "name": name_label
-            }
-            
-            # Bind click events
-            for widget in [btn_frame, btn_content, icon_label, name_label]:
-                widget.bind("<Button-1>", lambda e, a=analysis["name"]: self.on_preset_click(a))
-                widget.bind("<Enter>", lambda e, f=btn_frame: self.on_button_hover(f, True))
-                widget.bind("<Leave>", lambda e, f=btn_frame: self.on_button_hover(f, False))
-            
-            # Add tooltip
-            self.create_tooltip(btn_frame, analysis["tooltip"])
+            self.preset_buttons.append(btn)
     
     def create_custom_query(self, parent):
         """Create custom query input section"""
-        # Container frame
-        custom_frame = ttk.LabelFrame(parent, text="Custom Query", padding="10")
-        custom_frame.pack(fill="x")
+        # Container with padding
+        container = ttk.Frame(parent, padding="15")
+        container.pack(fill="both", expand=True)
         
-        # Description
-        desc_label = ttk.Label(
-            custom_frame,
+        # Instructions
+        instructions = ttk.Label(
+            container,
             text="Enter your own analysis question:",
-            font=(config.FONT_FAMILY, 10)
+            font=(config.FONT_FAMILY, 11, "bold")
         )
-        desc_label.pack(anchor="w")
+        instructions.pack(anchor="w", pady=(0, 10))
         
-        # Input frame
-        input_frame = ttk.Frame(custom_frame)
-        input_frame.pack(fill="x", pady=(5, 0))
+        # Text area frame
+        text_frame = ttk.LabelFrame(container, text="Custom Analysis Query", padding="10")
+        text_frame.pack(fill="both", expand=True, pady=(0, 10))
         
-        # Text entry
-        self.custom_query_var = tk.StringVar()
-        self.custom_entry = ttk.Entry(
-            input_frame,
-            textvariable=self.custom_query_var,
-            font=(config.FONT_FAMILY, 11)
+        # Text widget with scrollbar
+        text_container = ttk.Frame(text_frame)
+        text_container.pack(fill="both", expand=True)
+        
+        # Create text widget
+        self.custom_text = tk.Text(
+            text_container,
+            height=6,
+            wrap=tk.WORD,
+            font=(config.FONT_FAMILY, 11),
+            relief="sunken",
+            borderwidth=1
         )
-        self.custom_entry.pack(side="left", fill="x", expand=True)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(text_container, orient="vertical", command=self.custom_text.yview)
+        self.custom_text.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack text and scrollbar
+        self.custom_text.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Button frame
+        button_frame = ttk.Frame(container)
+        button_frame.pack(fill="x", pady=(10, 0))
         
         # Submit button
         self.custom_submit_btn = ttk.Button(
-            input_frame,
-            text="Analyze",
+            button_frame,
+            text="🔍 Analyze Custom Query",
             command=self.on_custom_query_submit,
-            state="disabled"
+            style="Accent.TButton"
         )
-        self.custom_submit_btn.pack(side="right", padx=(5, 0))
+        self.custom_submit_btn.pack(side="right")
         
-        # Bind Enter key
-        self.custom_entry.bind("<Return>", lambda e: self.on_custom_query_submit())
-        
-        # Example queries
-        examples_label = ttk.Label(
-            custom_frame,
-            text="Examples: \"Check if all bypass capacitors are present\" | "
-                 "\"Verify crystal oscillator circuit\" | \"Analyze grounding\"",
-            font=(config.FONT_FAMILY, 9),
-            foreground=config.COLORS['text_secondary'],
-            wraplength=400
+        # Clear button
+        clear_btn = ttk.Button(
+            button_frame,
+            text="Clear",
+            command=self.clear_custom_query
         )
-        examples_label.pack(anchor="w", pady=(5, 0))
-    
-    def create_tooltip(self, widget, text):
-        """Create a tooltip for a widget"""
-        def on_enter(event):
-            tooltip = tk.Toplevel()
-            tooltip.wm_overrideredirect(True)
-            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
-            
-            label = ttk.Label(
-                tooltip,
-                text=text,
-                background="#ffffe0",
-                relief="solid",
-                borderwidth=1,
-                font=(config.FONT_FAMILY, 9)
+        clear_btn.pack(side="right", padx=(0, 5))
+        
+        # Examples section
+        examples_frame = ttk.LabelFrame(container, text="Example Queries", padding="10")
+        examples_frame.pack(fill="x", pady=(15, 0))
+        
+        examples = [
+            "Check if all bypass capacitors are present and properly placed near power pins",
+            "Verify the crystal oscillator circuit meets the microcontroller's requirements",
+            "Analyze the grounding scheme and check for proper ground plane connections",
+            "Review power supply filtering and ensure adequate decoupling",
+            "Check for EMI/EMC design considerations and shielding requirements"
+        ]
+        
+        for example in examples:
+            example_btn = ttk.Button(
+                examples_frame,
+                text=f"📝 {example[:60]}{'...' if len(example) > 60 else ''}",
+                command=lambda ex=example: self.insert_example(ex)
             )
-            label.pack()
-            
-            widget.tooltip = tooltip
-        
-        def on_leave(event):
-            if hasattr(widget, 'tooltip'):
-                widget.tooltip.destroy()
-                del widget.tooltip
-        
-        widget.bind("<Enter>", on_enter)
-        widget.bind("<Leave>", on_leave)
+            example_btn.pack(anchor="w", pady=2, fill="x")
     
-    def on_button_hover(self, button_frame, entering):
-        """Handle button hover effects"""
-        if button_frame.cget("state") == "disabled":
-            return
-        
-        if entering:
-            button_frame.configure(bg=config.COLORS['accent'])
-        else:
-            button_frame.configure(bg=config.COLORS['bg_secondary'])
+    def insert_example(self, example_text):
+        """Insert example text into custom query field"""
+        self.custom_text.delete(1.0, tk.END)
+        self.custom_text.insert(1.0, example_text)
+    
+    def clear_custom_query(self):
+        """Clear the custom query text"""
+        self.custom_text.delete(1.0, tk.END)
     
     def on_preset_click(self, analysis_type):
         """Handle preset button click"""
         if not self.schematic_loaded:
             messagebox.showwarning(
                 "No Schematic",
-                "Please upload a schematic image first"
+                "Please upload a schematic image first before running analysis."
             )
             return
         
         self.logger.info(f"Preset analysis clicked: {analysis_type}")
         
-        # Visual feedback
-        self.flash_button(analysis_type)
-        
         # Trigger analysis
-        self.analysis_callback(analysis_type)
+        try:
+            self.analysis_callback(analysis_type)
+        except Exception as e:
+            self.logger.error(f"Error triggering analysis: {e}")
+            messagebox.showerror("Analysis Error", f"Failed to start analysis: {str(e)}")
     
     def on_custom_query_submit(self):
         """Handle custom query submission"""
         if not self.schematic_loaded:
             messagebox.showwarning(
                 "No Schematic",
-                "Please upload a schematic image first"
+                "Please upload a schematic image first before running analysis."
             )
             return
         
-        query = self.custom_query_var.get().strip()
+        # Get query text
+        query = self.custom_text.get(1.0, tk.END).strip()
         if not query:
             messagebox.showwarning(
                 "Empty Query",
-                "Please enter an analysis question"
+                "Please enter an analysis question before submitting."
             )
             return
         
-        self.logger.info(f"Custom query submitted: {query}")
-        
-        # Trigger analysis
-        self.analysis_callback("Custom Query", query)
-    
-    def flash_button(self, analysis_type):
-        """Flash button for visual feedback"""
-        if analysis_type not in self.buttons:
+        if len(query) < 10:
+            messagebox.showwarning(
+                "Query Too Short",
+                "Please enter a more detailed analysis question (at least 10 characters)."
+            )
             return
         
-        button = self.buttons[analysis_type]["frame"]
-        original_bg = button.cget("bg")
+        self.logger.info(f"Custom query submitted: {query[:100]}...")
         
-        # Flash effect
-        button.configure(bg=config.COLORS['success'])
-        self.after(100, lambda: button.configure(bg=original_bg))
+        # Trigger analysis
+        try:
+            self.analysis_callback("Custom Query", query)
+        except Exception as e:
+            self.logger.error(f"Error triggering custom analysis: {e}")
+            messagebox.showerror("Analysis Error", f"Failed to start custom analysis: {str(e)}")
     
     def update_button_states(self, schematic_loaded, datasheet_loaded):
         """Enable or disable buttons based on file upload status"""
         self.schematic_loaded = schematic_loaded
         self.datasheet_loaded = datasheet_loaded
         
+        # Determine button state
+        button_state = "normal" if schematic_loaded else "disabled"
+        
         # Update preset buttons
-        for analysis_name, button_info in self.buttons.items():
-            frame = button_info["frame"]
-            
-            if schematic_loaded:
-                # Enable button
-                frame.configure(relief="raised", bg=config.COLORS['bg_secondary'])
-                for widget in button_info.values():
-                    if isinstance(widget, tk.Widget):
-                        widget.configure(state="normal")
-                        if hasattr(widget, 'configure'):
-                            try:
-                                widget.configure(cursor="hand2")
-                            except:
-                                pass
-            else:
-                # Disable button
-                frame.configure(relief="flat", bg="#e0e0e0")
-                for widget in button_info.values():
-                    if isinstance(widget, tk.Widget):
-                        widget.configure(state="disabled")
-                        if hasattr(widget, 'configure'):
-                            try:
-                                widget.configure(cursor="")
-                            except:
-                                pass
+        for button in self.preset_buttons:
+            try:
+                button.configure(state=button_state)
+            except tk.TclError as e:
+                self.logger.warning(f"Could not configure preset button state: {e}")
         
-        # Update custom query button
-        if schematic_loaded:
-            self.custom_submit_btn.configure(state="normal")
-            self.custom_entry.configure(state="normal")
+        # Update custom query submit button
+        if self.custom_submit_btn:
+            try:
+                self.custom_submit_btn.configure(state=button_state)
+            except tk.TclError as e:
+                self.logger.warning(f"Could not configure custom submit button state: {e}")
+        
+        # Update custom text widget
+        if hasattr(self, 'custom_text'):
+            try:
+                text_state = "normal" if schematic_loaded else "disabled"
+                self.custom_text.configure(state=text_state)
+                
+                # Add helpful placeholder text when disabled
+                if not schematic_loaded:
+                    self.custom_text.configure(state="normal")
+                    current_text = self.custom_text.get(1.0, tk.END).strip()
+                    if not current_text:
+                        self.custom_text.insert(1.0, "Upload a schematic first to enable custom queries...")
+                    self.custom_text.configure(state="disabled")
+                else:
+                    # Clear placeholder text when enabled
+                    current_text = self.custom_text.get(1.0, tk.END).strip()
+                    if current_text == "Upload a schematic first to enable custom queries...":
+                        self.custom_text.delete(1.0, tk.END)
+                        
+            except tk.TclError as e:
+                self.logger.warning(f"Could not configure custom text state: {e}")
+        
+        # Log status update
+        status_msg = f"Button states updated - Schematic: {schematic_loaded}, Datasheet: {datasheet_loaded}"
+        self.logger.info(status_msg)
+        
+        # Update info message based on upload status
+        info_text = "💡 Tip: Upload a datasheet for more accurate analysis"
+        if schematic_loaded and datasheet_loaded:
+            info_text = "✅ Ready for analysis with schematic and datasheet"
+        elif schematic_loaded:
+            info_text = "📊 Ready for analysis (datasheet optional for better results)"
         else:
-            self.custom_submit_btn.configure(state="disabled")
-            self.custom_entry.configure(state="disabled")
-        
-        # Update visual indicators for datasheet status
-        if datasheet_loaded:
-            # Add visual indicator that datasheet is loaded
-            for button_info in self.buttons.values():
-                icon_label = button_info["icon"]
-                # Could add a small indicator here if desired
-        
-        self.logger.info(f"Button states updated - Schematic: {schematic_loaded}, Datasheet: {datasheet_loaded}")
+            info_text = "📁 Upload a schematic image to begin analysis"
     
     def reset(self):
         """Reset the panel to initial state"""
-        self.custom_query_var.set("")
+        # Clear custom query text
+        if hasattr(self, 'custom_text'):
+            try:
+                self.custom_text.configure(state="normal")
+                self.custom_text.delete(1.0, tk.END)
+            except tk.TclError:
+                pass
+        
+        # Reset button states
         self.update_button_states(False, False)
+        
+        self.logger.info("Analysis panel reset to initial state")
+    
+    def get_status_info(self):
+        """Get current status information for debugging"""
+        return {
+            'schematic_loaded': self.schematic_loaded,
+            'datasheet_loaded': self.datasheet_loaded,
+            'preset_buttons_count': len(self.preset_buttons),
+            'has_custom_submit_btn': self.custom_submit_btn is not None,
+            'has_custom_text': hasattr(self, 'custom_text')
+        }
