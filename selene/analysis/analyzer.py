@@ -1,5 +1,5 @@
 """
-Main analysis orchestration for SELENE
+Main analysis orchestration for SELENE - Fixed version
 """
 
 import logging
@@ -54,6 +54,11 @@ class SchematicAnalyzer:
         start_time = time.time()
         
         try:
+            # CRITICAL FIX: Ensure datasheet_data is always a dict
+            if not isinstance(datasheet_data, dict):
+                self.logger.warning(f"datasheet_data is not a dict (got {type(datasheet_data)}), creating empty dict")
+                datasheet_data = {}
+            
             # Validate inputs
             self.validate_analysis_inputs(schematic_path, analysis_type)
             
@@ -92,7 +97,8 @@ class SchematicAnalyzer:
             raise FileNotFoundError(f"Schematic file not found: {schematic_path}")
         
         # Check if analysis type is valid
-        valid_types = list(get_prompt_template("").keys()) + ["Custom Query"]
+        valid_types = ["Component Verification", "Pin Configuration Check", "Power Supply Analysis", 
+                      "Design Compliance", "Missing Components", "Custom Query"]
         if analysis_type not in valid_types:
             raise ValueError(f"Invalid analysis type: {analysis_type}")
         
@@ -114,6 +120,10 @@ class SchematicAnalyzer:
             dict: Analysis context
         """
         self.logger.info("Preparing analysis context")
+        
+        # Ensure datasheet_data is a dict
+        if not isinstance(datasheet_data, dict):
+            datasheet_data = {}
         
         # Build context using context builder
         context = self.context_builder.build_analysis_context(
@@ -224,14 +234,7 @@ class SchematicAnalyzer:
         return results
     
     def extract_findings(self, response_text: str) -> List[Dict[str, str]]:
-        """Extract structured findings from response
-        
-        Args:
-            response_text: Raw response text
-            
-        Returns:
-            list: List of finding dictionaries
-        """
+        """Extract structured findings from response"""
         findings = []
         
         # Look for common finding patterns
@@ -257,35 +260,10 @@ class SchematicAnalyzer:
                         'type': 'issue'
                     })
         
-        # Look for verification items
-        verification_patterns = [
-            r'(?i)verified[s]?\s*:?\s*(.+?)(?=\n\n|\n[A-Z]|$)',
-            r'(?i)correct[s]?\s*:?\s*(.+?)(?=\n\n|\n[A-Z]|$)',
-            r'(?i)good[s]?\s*:?\s*(.+?)(?=\n\n|\n[A-Z]|$)'
-        ]
-        
-        for pattern in verification_patterns:
-            matches = re.finditer(pattern, response_text, re.DOTALL)
-            for match in matches:
-                finding_text = match.group(1).strip()
-                if finding_text and len(finding_text) > 10:
-                    findings.append({
-                        'description': finding_text,
-                        'severity': 'INFO',
-                        'type': 'verification'
-                    })
-        
         return findings[:10]  # Limit to 10 findings
     
     def extract_recommendations(self, response_text: str) -> List[str]:
-        """Extract recommendations from response
-        
-        Args:
-            response_text: Raw response text
-            
-        Returns:
-            list: List of recommendations
-        """
+        """Extract recommendations from response"""
         recommendations = []
         
         import re
@@ -305,25 +283,10 @@ class SchematicAnalyzer:
                 if rec_text and len(rec_text) > 10:
                     recommendations.append(rec_text)
         
-        # Remove duplicates
-        unique_recommendations = []
-        seen = set()
-        for rec in recommendations:
-            if rec.lower() not in seen:
-                seen.add(rec.lower())
-                unique_recommendations.append(rec)
-        
-        return unique_recommendations[:8]  # Limit to 8 recommendations
+        return recommendations[:8]  # Limit to 8 recommendations
     
     def identify_issues(self, response_text: str) -> List[Dict[str, str]]:
-        """Identify and categorize issues from response
-        
-        Args:
-            response_text: Raw response text
-            
-        Returns:
-            list: List of categorized issues
-        """
+        """Identify and categorize issues from response"""
         issues = []
         
         # Define issue keywords and their severity
@@ -362,14 +325,7 @@ class SchematicAnalyzer:
         return issues[:8]  # Limit to 8 issues
     
     def determine_severity(self, finding_text: str) -> str:
-        """Determine severity of a finding
-        
-        Args:
-            finding_text: Finding description
-            
-        Returns:
-            str: Severity level
-        """
+        """Determine severity of a finding"""
         text_lower = finding_text.lower()
         
         # Critical issues
@@ -392,14 +348,7 @@ class SchematicAnalyzer:
         return 'INFO'
     
     def categorize_issue(self, issue_text: str) -> str:
-        """Categorize an issue by type
-        
-        Args:
-            issue_text: Issue description
-            
-        Returns:
-            str: Issue category
-        """
+        """Categorize an issue by type"""
         text_lower = issue_text.lower()
         
         if any(word in text_lower for word in ['pin', 'connection', 'wire', 'trace']):
@@ -414,16 +363,7 @@ class SchematicAnalyzer:
             return 'general'
     
     def create_summary(self, response_text: str, findings: List[Dict], issues: List[Dict]) -> str:
-        """Create a summary of the analysis
-        
-        Args:
-            response_text: Raw response text
-            findings: Extracted findings
-            issues: Identified issues
-            
-        Returns:
-            str: Summary text
-        """
+        """Create a summary of the analysis"""
         # Count issues by severity
         severity_counts = {}
         for issue in issues:
@@ -454,17 +394,7 @@ class SchematicAnalyzer:
     
     def format_analysis_content(self, raw_response: str, findings: List[Dict], 
                               recommendations: List[str], issues: List[Dict]) -> str:
-        """Format the analysis content for display
-        
-        Args:
-            raw_response: Raw response text
-            findings: Extracted findings
-            recommendations: Extracted recommendations  
-            issues: Identified issues
-            
-        Returns:
-            str: Formatted content
-        """
+        """Format the analysis content for display"""
         formatted_parts = []
         
         # Add structured findings if we have them
@@ -494,15 +424,7 @@ class SchematicAnalyzer:
         return "\n".join(formatted_parts)
     
     def estimate_confidence(self, response_text: str, analysis_context: Dict[str, Any]) -> str:
-        """Estimate confidence level of the analysis
-        
-        Args:
-            response_text: Raw response text
-            analysis_context: Analysis context
-            
-        Returns:
-            str: Confidence level (High/Medium/Low)
-        """
+        """Estimate confidence level of the analysis"""
         confidence_score = 0.5  # Base score
         
         # Boost confidence if datasheet is available
@@ -519,11 +441,6 @@ class SchematicAnalyzer:
         if component_refs > 3:
             confidence_score += 0.1
         
-        # Reduce confidence if response seems generic
-        generic_phrases = ['general', 'typical', 'usually', 'might', 'possibly']
-        generic_count = sum(1 for phrase in generic_phrases if phrase in response_text.lower())
-        confidence_score -= generic_count * 0.05
-        
         # Clamp to valid range
         confidence_score = max(0.0, min(1.0, confidence_score))
         
@@ -535,14 +452,7 @@ class SchematicAnalyzer:
             return "Low"
     
     def assess_analysis_quality(self, response_text: str) -> str:
-        """Assess the quality of the analysis
-        
-        Args:
-            response_text: Raw response text
-            
-        Returns:
-            str: Quality assessment
-        """
+        """Assess the quality of the analysis"""
         quality_score = 0
         
         # Check for technical depth
@@ -561,11 +471,6 @@ class SchematicAnalyzer:
         if len(response_text) > 600:
             quality_score += 2
         
-        # Check for actionable recommendations
-        actionable_words = ['recommend', 'suggest', 'should', 'add', 'remove', 'change', 'verify']
-        actionable_count = sum(1 for word in actionable_words if word.lower() in response_text.lower())
-        quality_score += min(actionable_count, 5)
-        
         if quality_score >= 15:
             return "Excellent"
         elif quality_score >= 10:
@@ -576,15 +481,7 @@ class SchematicAnalyzer:
             return "Basic"
     
     def create_error_result(self, error_message: str, analysis_type: str) -> Dict[str, Any]:
-        """Create an error result when analysis fails
-        
-        Args:
-            error_message: Error description
-            analysis_type: Type of analysis that failed
-            
-        Returns:
-            dict: Error result structure
-        """
+        """Create an error result when analysis fails"""
         return {
             'analysis_type': analysis_type,
             'summary': f"Analysis failed: {error_message}",
@@ -613,273 +510,3 @@ class SchematicAnalyzer:
                 'timestamp': datetime.now().isoformat()
             }
         }
-
-
-def format_analysis_results(results: Dict[str, Any]) -> str:
-    """Format analysis results for display or export
-    
-    Args:
-        results: Analysis results dictionary
-        
-    Returns:
-        str: Formatted results text
-    """
-    output_lines = []
-    
-    # Header
-    output_lines.append(f"SELENE Analysis Report: {results['analysis_type']}")
-    output_lines.append("=" * 60)
-    output_lines.append("")
-    
-    # Summary
-    output_lines.append(f"Summary: {results['summary']}")
-    output_lines.append("")
-    
-    # Metadata
-    metadata = results.get('metadata', {})
-    output_lines.append("Analysis Details:")
-    output_lines.append(f"  Schematic: {metadata.get('schematic_file', 'Unknown')}")
-    output_lines.append(f"  Datasheet Available: {'Yes' if metadata.get('has_datasheet') else 'No'}")
-    if metadata.get('datasheet_component'):
-        output_lines.append(f"  Component: {metadata['datasheet_component']}")
-    output_lines.append(f"  Confidence: {metadata.get('confidence', 'Unknown')}")
-    output_lines.append(f"  Quality: {metadata.get('analysis_quality', 'Unknown')}")
-    if metadata.get('analysis_time'):
-        output_lines.append(f"  Analysis Time: {metadata['analysis_time']:.1f}s")
-    output_lines.append("")
-    
-    # Main content
-    output_lines.append("Analysis Results:")
-    output_lines.append("-" * 40)
-    content = results.get('content', '')
-    if content:
-        output_lines.append(content)
-    else:
-        output_lines.append("No analysis content available.")
-    
-    # Findings section
-    findings = results.get('findings', [])
-    if findings:
-        output_lines.append("")
-        output_lines.append("Detailed Findings:")
-        output_lines.append("-" * 40)
-        for i, finding in enumerate(findings, 1):
-            severity = finding.get('severity', 'INFO')
-            description = finding.get('description', 'No description')
-            output_lines.append(f"{i}. [{severity}] {description}")
-    
-    # Recommendations section
-    recommendations = results.get('recommendations', [])
-    if recommendations:
-        output_lines.append("")
-        output_lines.append("Recommendations:")
-        output_lines.append("-" * 40)
-        for i, rec in enumerate(recommendations, 1):
-            output_lines.append(f"{i}. {rec}")
-    
-    # Issues section
-    issues = results.get('issues', [])
-    if issues:
-        output_lines.append("")
-        output_lines.append("Issues by Category:")
-        output_lines.append("-" * 40)
-        
-        # Group issues by category
-        issues_by_category = {}
-        for issue in issues:
-            category = issue.get('category', 'general')
-            if category not in issues_by_category:
-                issues_by_category[category] = []
-            issues_by_category[category].append(issue)
-        
-        for category, category_issues in issues_by_category.items():
-            output_lines.append(f"\n{category.title()}:")
-            for issue in category_issues:
-                severity = issue.get('severity', 'INFO')
-                description = issue.get('description', 'No description')
-                component = issue.get('component', 'General')
-                output_lines.append(f"  [{severity}] {component}: {description}")
-    
-    # Footer
-    output_lines.append("")
-    output_lines.append("-" * 60)
-    if metadata.get('timestamp'):
-        output_lines.append(f"Generated: {metadata['timestamp']}")
-    output_lines.append("Generated by SELENE - Schematic Review Tool")
-    
-    return "\n".join(output_lines)
-
-
-def validate_analysis_inputs(schematic_path: str, datasheet_data: Dict[str, Any] = None) -> bool:
-    """Validate inputs for analysis
-    
-    Args:
-        schematic_path: Path to schematic image
-        datasheet_data: Optional datasheet data
-        
-    Returns:
-        bool: True if inputs are valid
-    """
-    logger = logging.getLogger(__name__)
-    
-    # Check schematic file
-    if not os.path.exists(schematic_path):
-        logger.error(f"Schematic file not found: {schematic_path}")
-        return False
-    
-    # Check file extension
-    valid_extensions = ['.png', '.jpg', '.jpeg', '.bmp']
-    if not any(schematic_path.lower().endswith(ext) for ext in valid_extensions):
-        logger.error(f"Invalid schematic file format: {schematic_path}")
-        return False
-    
-    # Check file size
-    try:
-        file_size = os.path.getsize(schematic_path)
-        max_size = config.MAX_FILE_SIZE_MB * 1024 * 1024
-        if file_size > max_size:
-            logger.error(f"Schematic file too large: {file_size / (1024*1024):.1f}MB")
-            return False
-    except Exception as e:
-        logger.error(f"Error checking file size: {e}")
-        return False
-    
-    # Validate datasheet data if provided
-    if datasheet_data:
-        if not isinstance(datasheet_data, dict):
-            logger.error("Datasheet data must be a dictionary")
-            return False
-        
-        # Check for required fields
-        required_fields = ['component_name']
-        for field in required_fields:
-            if field not in datasheet_data:
-                logger.warning(f"Missing datasheet field: {field}")
-    
-    return True
-
-
-class AnalysisCache:
-    """Simple cache for analysis results to avoid re-processing identical requests"""
-    
-    def __init__(self, max_size: int = 100):
-        """Initialize cache
-        
-        Args:
-            max_size: Maximum number of cached results
-        """
-        self.cache = {}
-        self.max_size = max_size
-        self.access_times = {}
-        self.logger = logging.getLogger(__name__)
-    
-    def _generate_key(self, schematic_path: str, analysis_type: str, 
-                     datasheet_hash: Optional[str] = None) -> str:
-        """Generate cache key for request
-        
-        Args:
-            schematic_path: Path to schematic
-            analysis_type: Type of analysis
-            datasheet_hash: Optional hash of datasheet data
-            
-        Returns:
-            str: Cache key
-        """
-        import hashlib
-        
-        # Get file modification time and size
-        try:
-            stat = os.stat(schematic_path)
-            file_info = f"{stat.st_size}_{stat.st_mtime}"
-        except:
-            file_info = "unknown"
-        
-        # Create cache key
-        key_parts = [schematic_path, analysis_type, file_info]
-        if datasheet_hash:
-            key_parts.append(datasheet_hash)
-        
-        key_string = "|".join(key_parts)
-        return hashlib.md5(key_string.encode()).hexdigest()
-    
-    def get(self, schematic_path: str, analysis_type: str, 
-            datasheet_data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
-        """Get cached result if available
-        
-        Args:
-            schematic_path: Path to schematic
-            analysis_type: Type of analysis
-            datasheet_data: Optional datasheet data
-            
-        Returns:
-            dict: Cached result or None
-        """
-        # Generate datasheet hash if provided
-        datasheet_hash = None
-        if datasheet_data:
-            import json
-            import hashlib
-            datasheet_json = json.dumps(datasheet_data, sort_keys=True)
-            datasheet_hash = hashlib.md5(datasheet_json.encode()).hexdigest()
-        
-        key = self._generate_key(schematic_path, analysis_type, datasheet_hash)
-        
-        if key in self.cache:
-            # Update access time
-            self.access_times[key] = time.time()
-            self.logger.debug(f"Cache hit for analysis: {analysis_type}")
-            return self.cache[key]
-        
-        return None
-    
-    def put(self, schematic_path: str, analysis_type: str, result: Dict[str, Any],
-            datasheet_data: Dict[str, Any] = None):
-        """Store result in cache
-        
-        Args:
-            schematic_path: Path to schematic
-            analysis_type: Type of analysis
-            result: Analysis result to cache
-            datasheet_data: Optional datasheet data
-        """
-        # Generate datasheet hash if provided
-        datasheet_hash = None
-        if datasheet_data:
-            import json
-            import hashlib
-            datasheet_json = json.dumps(datasheet_data, sort_keys=True)
-            datasheet_hash = hashlib.md5(datasheet_json.encode()).hexdigest()
-        
-        key = self._generate_key(schematic_path, analysis_type, datasheet_hash)
-        
-        # Remove oldest entry if cache is full
-        if len(self.cache) >= self.max_size:
-            oldest_key = min(self.access_times.keys(), key=lambda k: self.access_times[k])
-            del self.cache[oldest_key]
-            del self.access_times[oldest_key]
-        
-        # Store result
-        self.cache[key] = result
-        self.access_times[key] = time.time()
-        
-        self.logger.debug(f"Cached analysis result: {analysis_type}")
-    
-    def clear(self):
-        """Clear all cached results"""
-        self.cache.clear()
-        self.access_times.clear()
-        self.logger.info("Analysis cache cleared")
-
-
-if __name__ == "__main__":
-    # Test the analyzer
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    
-    # This would normally be run with real Ollama client
-    print("SchematicAnalyzer module loaded successfully")
-    print("Main components:")
-    print("- SchematicAnalyzer: Main analysis orchestration")
-    print("- format_analysis_results: Result formatting")
-    print("- validate_analysis_inputs: Input validation") 
-    print("- AnalysisCache: Results caching")
